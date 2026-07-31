@@ -3,19 +3,22 @@ import { CheckSquare, FileText, MessageSquare, Bell, Plus, Send, Circle, CheckCi
 
 // IMPORTANT: change this to your deployed backend URL once Render is live.
 // For local testing on Replit, this points to the same Repl's backend port.
-const API_BASE = "https://base-dashboard-dc4m.onrender.com/api";
+const API_BASE = "http://localhost:8000/api";
 
 export default function Dashboard() {
   const [tab, setTab] = useState("home");
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
   const [reminders, setReminders] = useState([]);
-  const [overview, setOverview] = useState({ total_tasks: 0, done_tasks: 0, completion_pct: 0 });
+  const [overview, setOverview] = useState({ total_tasks: 0, done_tasks: 0, completion_pct: 0, streak: 0, daily_counts: [0,0,0,0,0,0,0], day_labels: ["M","T","W","T","F","S","S"], category_split: [], upcoming: [] });
   const [loading, setLoading] = useState(true);
 
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDue, setNewTaskDue] = useState("");
+  const [newTaskCategory, setNewTaskCategory] = useState("Other");
+  const CATEGORIES = ["Sakha", "SAI", "DSA", "Other"];
+  const CATEGORY_COLORS = { Sakha: "#4FD1C5", SAI: "#8B7EFF", DSA: "#F5A623", Other: "#5A6772" };
 
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState("");
@@ -60,12 +63,13 @@ export default function Dashboard() {
     const res = await fetch(`${API_BASE}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: newTaskTitle, due_date: newTaskDue || null }),
+      body: JSON.stringify({ title: newTaskTitle, due_date: newTaskDue || null, category: newTaskCategory }),
     });
     const created = await res.json();
     setTasks([created, ...tasks]);
     setNewTaskTitle("");
     setNewTaskDue("");
+    setNewTaskCategory("Other");
     setShowTaskForm(false);
     fetchAll(); // refresh overview stats too
   };
@@ -155,13 +159,16 @@ export default function Dashboard() {
 
         {!loading && tab === "home" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+            {/* Streak + Completion row */}
             <div style={{ display: "flex", gap: "10px" }}>
               <div style={{ flex: 1, background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#F5A623" }}>
                   <Flame size={18} />
-                  <span style={{ fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Total Tasks</span>
+                  <span style={{ fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Streak</span>
                 </div>
-                <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "6px", fontFamily: "monospace" }}>{overview.total_tasks}</div>
+                <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "6px", fontFamily: "monospace" }}>{overview.streak}</div>
+                <div style={{ fontSize: "11px", color: "#5A6772" }}>day{overview.streak === 1 ? "" : "s"} active</div>
               </div>
               <div style={{ flex: 1, background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#4FD1C5" }}>
@@ -169,11 +176,74 @@ export default function Dashboard() {
                   <span style={{ fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Completed</span>
                 </div>
                 <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "6px", fontFamily: "monospace" }}>{overview.completion_pct}%</div>
+                <div style={{ fontSize: "11px", color: "#5A6772" }}>{overview.done_tasks} of {overview.total_tasks} tasks</div>
               </div>
             </div>
+
+            {/* Daily bar chart - last 7 days */}
             <div style={{ background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "16px" }}>
-              <div style={{ fontSize: "13px", color: "#8B98A5" }}>{overview.done_tasks} of {overview.total_tasks} tasks done. Add tasks in the Tasks tab to see this grow.</div>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#8B98A5", marginBottom: "14px" }}>Tasks Completed (Last 7 Days)</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", height: "80px" }}>
+                {overview.daily_counts.map((val, i) => {
+                  const maxVal = Math.max(...overview.daily_counts, 1);
+                  const heightPct = (val / maxVal) * 100;
+                  const isToday = i === overview.daily_counts.length - 1;
+                  return (
+                    <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                      <div style={{ width: "100%", height: `${Math.max(heightPct, val > 0 ? 8 : 2)}%`, background: isToday ? "#4FD1C5" : "#2A3540", borderRadius: "4px", minHeight: "4px" }} />
+                      <span style={{ fontSize: "10px", color: "#5A6772" }}>{overview.day_labels[i]}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Category split */}
+            {overview.category_split.length > 0 && (
+              <div style={{ background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "16px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#8B98A5", marginBottom: "12px" }}>Where Your Tasks Go</div>
+                <div style={{ display: "flex", width: "100%", height: "10px", borderRadius: "6px", overflow: "hidden", marginBottom: "12px" }}>
+                  {overview.category_split.map((c, i) => (
+                    <div key={i} style={{ width: `${c.pct}%`, background: CATEGORY_COLORS[c.label] || "#5A6772" }} />
+                  ))}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {overview.category_split.map((c, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: CATEGORY_COLORS[c.label] || "#5A6772" }} />
+                        <span style={{ color: "#C5D0DB" }}>{c.label}</span>
+                      </div>
+                      <span style={{ fontFamily: "monospace", color: "#8B98A5" }}>{c.pct}% ({c.count})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upcoming */}
+            {overview.upcoming.length > 0 && (
+              <div style={{ background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px" }}>
+                  <Clock size={16} color="#8B98A5" />
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#8B98A5" }}>Coming Up</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {overview.upcoming.map((t, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: "12px", borderLeft: "2px solid #2A3540" }}>
+                      <span style={{ fontSize: "14px", color: "#E6EDF3" }}>{t.title}</span>
+                      <span style={{ fontSize: "12px", color: "#5A6772", fontFamily: "monospace" }}>{t.due_date}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {overview.total_tasks === 0 && (
+              <div style={{ fontSize: "13px", color: "#5A6772", textAlign: "center", padding: "20px 0" }}>
+                Add your first task to see your progress here.
+              </div>
+            )}
           </div>
         )}
 
@@ -187,7 +257,10 @@ export default function Dashboard() {
                 </button>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: "15px", textDecoration: t.done ? "line-through" : "none", color: t.done ? "#5A6772" : "#E6EDF3" }}>{t.title}</div>
-                  {t.due_date && <div style={{ fontSize: "12px", color: "#5A6772", marginTop: "2px", fontFamily: "monospace" }}>{t.due_date}</div>}
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "2px" }}>
+                    {t.due_date && <span style={{ fontSize: "12px", color: "#5A6772", fontFamily: "monospace" }}>{t.due_date}</span>}
+                    {t.category && <span style={{ fontSize: "10px", color: CATEGORY_COLORS[t.category] || "#5A6772", fontWeight: 600 }}>{t.category}</span>}
+                  </div>
                 </div>
                 <button onClick={() => deleteTask(t.id)} style={{ background: "none", border: "none", padding: 4 }}>
                   <Trash2 size={16} color="#5A6772" />
@@ -200,6 +273,20 @@ export default function Dashboard() {
               <div style={{ background: "#151C24", border: "1px solid #2A3540", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
                 <input value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Task title" style={inputStyle} autoFocus />
                 <input value={newTaskDue} onChange={(e) => setNewTaskDue(e.target.value)} placeholder="Due date (e.g. Fri, Tomorrow)" style={inputStyle} />
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setNewTaskCategory(cat)}
+                      style={{
+                        background: newTaskCategory === cat ? CATEGORY_COLORS[cat] : "transparent",
+                        color: newTaskCategory === cat ? "#0F1419" : "#8B98A5",
+                        border: `1px solid ${newTaskCategory === cat ? CATEGORY_COLORS[cat] : "#2A3540"}`,
+                        borderRadius: "16px", padding: "5px 12px", fontSize: "12px", fontWeight: 600
+                      }}
+                    >{cat}</button>
+                  ))}
+                </div>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button onClick={addTask} style={saveButtonStyle}>Save</button>
                   <button onClick={() => setShowTaskForm(false)} style={cancelButtonStyle}>Cancel</button>
@@ -273,43 +360,4 @@ export default function Dashboard() {
             {showReminderForm && (
               <div style={{ background: "#151C24", border: "1px solid #2A3540", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
                 <input value={newReminderTitle} onChange={(e) => setNewReminderTitle(e.target.value)} placeholder="Reminder title" style={inputStyle} autoFocus />
-                <input value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} placeholder="Time (e.g. 6:00 PM)" style={inputStyle} />
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={addReminder} style={saveButtonStyle}>Save</button>
-                  <button onClick={() => setShowReminderForm(false)} style={cancelButtonStyle}>Cancel</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {tab === "chat" && (
-        <div style={{ position: "fixed", bottom: "64px", left: 0, right: 0, padding: "10px 16px", background: "#0F1419", borderTop: "1px solid #1C2530", display: "flex", gap: "8px" }}>
-          <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Ask anything..." style={{ flex: 1, background: "#151C24", border: "1px solid #1C2530", borderRadius: "20px", padding: "10px 16px", color: "#E6EDF3", fontSize: "14px", outline: "none" }} />
-          <button onClick={sendMessage} style={{ background: "#4FD1C5", border: "none", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Send size={18} color="#0F1419" />
-          </button>
-        </div>
-      )}
-
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#0B0F13", borderTop: "1px solid #1C2530", display: "flex", justifyContent: "space-around", padding: "8px 0 max(8px, env(safe-area-inset-bottom))" }}>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = tab === item.id;
-          return (
-            <button key={item.id} onClick={() => setTab(item.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", color: active ? "#4FD1C5" : "#5A6772", padding: "4px 8px" }}>
-              <Icon size={19} />
-              <span style={{ fontSize: "10px", fontWeight: active ? 600 : 400 }}>{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-const addButtonStyle = { background: "transparent", border: "1px dashed #2A3540", borderRadius: "12px", padding: "12px", color: "#8B98A5", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "4px" };
-const inputStyle = { background: "#0F1419", border: "1px solid #2A3540", borderRadius: "8px", padding: "10px 12px", color: "#E6EDF3", fontSize: "14px", outline: "none", fontFamily: "inherit" };
-const saveButtonStyle = { flex: 1, background: "#4FD1C5", border: "none", borderRadius: "8px", padding: "10px", color: "#0F1419", fontWeight: 600, fontSize: "14px" };
-const cancelButtonStyle = { flex: 1, background: "transparent", border: "1px solid #2A3540", borderRadius: "8px", padding: "10px", color: "#8B98A5", fontSize: "14px" };
+        
