@@ -382,6 +382,11 @@ def get_overview():
             "SELECT title, due_date FROM tasks WHERE done = 0 AND due_date IS NOT NULL AND due_date != '' ORDER BY id DESC LIMIT 5"
         ).fetchall()
 
+        # ---- Reminders: show the next few upcoming ones on the Overview screen too ----
+        reminders_preview = conn.execute(
+            "SELECT title, remind_time FROM reminders ORDER BY remind_time ASC LIMIT 3"
+        ).fetchall()
+
         return {
             "total_tasks": total_tasks,
             "done_tasks": done_tasks,
@@ -391,10 +396,10 @@ def get_overview():
             "day_labels": day_labels,
             "category_split": category_split,
             "upcoming": [dict(u) for u in upcoming],
+            "reminders_preview": [dict(r) for r in reminders_preview],
         }
 
 
 @app.get("/")
 def health_check():
     return {"status": "Base backend is running"}
-    
