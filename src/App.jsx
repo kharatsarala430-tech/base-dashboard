@@ -3,7 +3,7 @@ import { CheckSquare, FileText, MessageSquare, Bell, Plus, Send, Circle, CheckCi
 
 // IMPORTANT: change this to your deployed backend URL once Render is live.
 // For local testing on Replit, this points to the same Repl's backend port.
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = "https://base-dashboard-dc4m.onrender.com/api";
 
 export default function Dashboard() {
   const [tab, setTab] = useState("home");
@@ -371,4 +371,59 @@ export default function Dashboard() {
         {!loading && tab === "reminders" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {reminders.length === 0 && <div style={{ color: "#5A6772", textAlign: "center", padding: "20px 0" }}>No reminders yet.</div>}
-            {reminders.map((r) => 
+            {reminders.map((r) => (
+              <div key={r.id} style={{ background: "#151C24", border: "1px solid #1C2530", borderRadius: "12px", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: "15px" }}>{r.title}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ fontSize: "12px", color: "#F5A623", fontFamily: "monospace", fontWeight: 600 }}>{r.remind_time}</span>
+                  <button onClick={() => deleteReminder(r.id)} style={{ background: "none", border: "none", padding: 2 }}>
+                    <Trash2 size={14} color="#5A6772" />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {!showReminderForm && <button onClick={() => setShowReminderForm(true)} style={addButtonStyle}><Plus size={18} /> Add Reminder</button>}
+            {showReminderForm && (
+              <div style={{ background: "#151C24", border: "1px solid #2A3540", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <input value={newReminderTitle} onChange={(e) => setNewReminderTitle(e.target.value)} placeholder="Reminder title" style={inputStyle} autoFocus />
+                <input value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} placeholder="Time (e.g. 6:00 PM)" style={inputStyle} />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button onClick={addReminder} style={saveButtonStyle}>Save</button>
+                  <button onClick={() => setShowReminderForm(false)} style={cancelButtonStyle}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {tab === "chat" && (
+        <div style={{ position: "fixed", bottom: "64px", left: 0, right: 0, padding: "10px 16px", background: "#0F1419", borderTop: "1px solid #1C2530", display: "flex", gap: "8px" }}>
+          <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Ask anything..." style={{ flex: 1, background: "#151C24", border: "1px solid #1C2530", borderRadius: "20px", padding: "10px 16px", color: "#E6EDF3", fontSize: "14px", outline: "none" }} />
+          <button onClick={sendMessage} style={{ background: "#4FD1C5", border: "none", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Send size={18} color="#0F1419" />
+          </button>
+        </div>
+      )}
+
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#0B0F13", borderTop: "1px solid #1C2530", display: "flex", justifyContent: "space-around", padding: "8px 0 max(8px, env(safe-area-inset-bottom))" }}>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = tab === item.id;
+          return (
+            <button key={item.id} onClick={() => setTab(item.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", color: active ? "#4FD1C5" : "#5A6772", padding: "4px 8px" }}>
+              <Icon size={19} />
+              <span style={{ fontSize: "10px", fontWeight: active ? 600 : 400 }}>{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const addButtonStyle = { background: "transparent", border: "1px dashed #2A3540", borderRadius: "12px", padding: "12px", color: "#8B98A5", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "4px" };
+const inputStyle = { background: "#0F1419", border: "1px solid #2A3540", borderRadius: "8px", padding: "10px 12px", color: "#E6EDF3", fontSize: "14px", outline: "none", fontFamily: "inherit" };
+const saveButtonStyle = { flex: 1, background: "#4FD1C5", border: "none", borderRadius: "8px", padding: "10px", color: "#0F1419", fontWeight: 600, fontSize: "14px" };
+const cancelButtonStyle = { flex: 1, background: "transparent", border: "1px solid #2A3540", borderRadius: "8px", padding: "10px", color: "#8B98A5", fontSize: "14px" };
