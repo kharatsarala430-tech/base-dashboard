@@ -33,7 +33,7 @@ DB_PATH = "base.db"
 
 # Gemini API key — set this as an Environment Variable on Render, never hardcode it here.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 SYSTEM_PROMPT = """You are "Base", Sarthak's personal AI mentor inside his self-built personal dashboard.
