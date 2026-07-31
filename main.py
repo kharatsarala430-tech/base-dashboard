@@ -10,8 +10,10 @@ Everything is stored in a single SQLite file (base.db) sitting next to this scri
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import sqlite3
+import os
+import httpx
 from datetime import datetime
 from contextlib import contextmanager
 
@@ -28,6 +30,28 @@ app.add_middleware(
 )
 
 DB_PATH = "base.db"
+
+# Gemini API key — set this as an Environment Variable on Render, never hardcode it here.
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
+SYSTEM_PROMPT = """You are "Base", Sarthak's personal AI mentor inside his self-built personal dashboard.
+
+About Sarthak:
+- Incoming B.E. Artificial Intelligence & Data Science student at PREC Loni (SPPU), batch of 2030.
+- Solo founder building two projects: Sakha (a B2B EdTech platform for Indian engineering colleges) and SAI (his long-term personal agentic AI dream project).
+- Currently has no laptop, works entirely from mobile via Replit/GitHub/Netlify/Render.
+- Still learning Python, Maths, DSA, and English.
+- Prefers Hinglish (Hindi-English mix) communication, with simple explanations and real-life analogies.
+- Values honest, mentor-like guidance over fast, assumption-heavy answers.
+
+How to respond:
+- Always reply in Hinglish, warm and encouraging but honest — like a trusted mentor, not a generic assistant.
+- Keep explanations simple and step-by-step for technical topics; use analogies where helpful.
+- If Sarthak seems to be avoiding an urgent real-world task (like customer interviews) in favor of new side projects, gently flag it — this is a known pattern for him.
+- Be concise on mobile — avoid overly long responses unless he asks for depth.
+"""
 
 
 @contextmanager
@@ -78,6 +102,14 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
 
 
 init_db()
@@ -111,6 +143,10 @@ class NoteUpdate(BaseModel):
 class ReminderCreate(BaseModel):
     title: str
     remind_time: str
+
+
+class ChatMessageCreate(BaseModel):
+    content: str
 
 
 # ---------------------------- TASKS ----------------------------
@@ -221,6 +257,72 @@ def delete_reminder(reminder_id: int):
         return {"deleted": True}
 
 
+# ---------------------------- AI CHAT ----------------------------
+
+@app.get("/api/chat")
+def get_chat_history():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM chat_messages ORDER BY id ASC").fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.post("/api/chat")
+async def send_chat_message(message: ChatMessageCreate):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is not configured on the server.")
+
+    with get_db() as conn:
+        # Save the user's message first
+        conn.execute(
+            "INSERT INTO chat_messages (role, content, created_at) VALUES (?, ?, ?)",
+            ("user", message.content, datetime.utcnow().isoformat())
+        )
+
+        # Pull recent history (last 20 messages) to give Gemini conversational context
+        history_rows = conn.execute(
+            "SELECT role, content FROM chat_messages ORDER BY id DESC LIMIT 20"
+        ).fetchall()
+        history_rows = list(reversed(history_rows))  # oldest first
+
+        # Build Gemini's expected "contents" format
+        contents = []
+        for row in history_rows:
+            gemini_role = "model" if row["role"] == "ai" else "user"
+            contents.append({"role": gemini_role, "parts": [{"text": row["content"]}]})
+
+        payload = {
+            "contents": contents,
+            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                ai_text = data["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception as e:
+            ai_text = f"Sorry, AI se connect nahi ho paya. Error: {str(e)}"
+
+        # Save the AI's reply
+        conn.execute(
+            "INSERT INTO chat_messages (role, content, created_at) VALUES (?, ?, ?)",
+            ("ai", ai_text, datetime.utcnow().isoformat())
+        )
+
+        return {"role": "ai", "content": ai_text}
+
+
+@app.delete("/api/chat")
+def clear_chat_history():
+    with get_db() as conn:
+        conn.execute("DELETE FROM chat_messages")
+        return {"cleared": True}
+
+
 # ---------------------------- OVERVIEW (for Phase 1's dashboard stats) ----------------------------
 
 @app.get("/api/overview")
@@ -295,4 +397,4 @@ def get_overview():
 @app.get("/")
 def health_check():
     return {"status": "Base backend is running"}
-        
+    
