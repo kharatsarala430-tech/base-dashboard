@@ -10,7 +10,7 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
   const [reminders, setReminders] = useState([]);
-  const [overview, setOverview] = useState({ total_tasks: 0, done_tasks: 0, completion_pct: 0, streak: 0, daily_counts: [0,0,0,0,0,0,0], day_labels: ["M","T","W","T","F","S","S"], category_split: [], upcoming: [] });
+  const [overview, setOverview] = useState({ total_tasks: 0, done_tasks: 0, completion_pct: 0, streak: 0, daily_counts: [0,0,0,0,0,0,0], day_labels: ["M","T","W","T","F","S","S"], category_split: [], upcoming: [], reminders_preview: [] });
   const [loading, setLoading] = useState(true);
 
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -256,6 +256,24 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* Reminders preview */}
+            {overview.reminders_preview && overview.reminders_preview.length > 0 && (
+              <div style={{ background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px" }}>
+                  <Bell size={16} color="#F5A623" />
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#8B98A5" }}>Reminders</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {overview.reminders_preview.map((r, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: "12px", borderLeft: "2px solid #F5A623" }}>
+                      <span style={{ fontSize: "14px", color: "#E6EDF3" }}>{r.title}</span>
+                      <span style={{ fontSize: "12px", color: "#F5A623", fontFamily: "monospace", fontWeight: 600 }}>{r.remind_time}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {overview.total_tasks === 0 && (
               <div style={{ fontSize: "13px", color: "#5A6772", textAlign: "center", padding: "20px 0" }}>
                 Add your first task to see your progress here.
@@ -347,83 +365,4 @@ export default function Dashboard() {
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px", marginBottom: "12px" }}>
               {messages.length === 0 && (
                 <div style={{ alignSelf: "flex-start", background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "10px 14px", maxWidth: "80%", fontSize: "14px" }}>
-                  Hey Sarthak. Base is online — kuch bhi pooch sakta hai.
-                </div>
-              )}
-              {messages.map((m, i) => (
-                <div key={i} style={{
-                  alignSelf: m.from === "user" ? "flex-end" : "flex-start",
-                  background: m.from === "user" ? "#4FD1C5" : "#151C24",
-                  color: m.from === "user" ? "#0F1419" : "#E6EDF3",
-                  border: m.from === "ai" ? "1px solid #1C2530" : "none",
-                  borderRadius: "14px", padding: "10px 14px", maxWidth: "80%", fontSize: "14px", whiteSpace: "pre-wrap"
-                }}>{m.text}</div>
-              ))}
-              {chatLoading && (
-                <div style={{ alignSelf: "flex-start", background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#5A6772" }}>
-                  Typing...
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {!loading && tab === "reminders" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {reminders.length === 0 && <div style={{ color: "#5A6772", textAlign: "center", padding: "20px 0" }}>No reminders yet.</div>}
-            {reminders.map((r) => (
-              <div key={r.id} style={{ background: "#151C24", border: "1px solid #1C2530", borderRadius: "12px", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: "15px" }}>{r.title}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ fontSize: "12px", color: "#F5A623", fontFamily: "monospace", fontWeight: 600 }}>{r.remind_time}</span>
-                  <button onClick={() => deleteReminder(r.id)} style={{ background: "none", border: "none", padding: 2 }}>
-                    <Trash2 size={14} color="#5A6772" />
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {!showReminderForm && <button onClick={() => setShowReminderForm(true)} style={addButtonStyle}><Plus size={18} /> Add Reminder</button>}
-            {showReminderForm && (
-              <div style={{ background: "#151C24", border: "1px solid #2A3540", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                <input value={newReminderTitle} onChange={(e) => setNewReminderTitle(e.target.value)} placeholder="Reminder title" style={inputStyle} autoFocus />
-                <input value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} placeholder="Time (e.g. 6:00 PM)" style={inputStyle} />
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={addReminder} style={saveButtonStyle}>Save</button>
-                  <button onClick={() => setShowReminderForm(false)} style={cancelButtonStyle}>Cancel</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {tab === "chat" && (
-        <div style={{ position: "fixed", bottom: "64px", left: 0, right: 0, padding: "10px 16px", background: "#0F1419", borderTop: "1px solid #1C2530", display: "flex", gap: "8px" }}>
-          <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Ask anything..." style={{ flex: 1, background: "#151C24", border: "1px solid #1C2530", borderRadius: "20px", padding: "10px 16px", color: "#E6EDF3", fontSize: "14px", outline: "none" }} />
-          <button onClick={sendMessage} style={{ background: "#4FD1C5", border: "none", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Send size={18} color="#0F1419" />
-          </button>
-        </div>
-      )}
-
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#0B0F13", borderTop: "1px solid #1C2530", display: "flex", justifyContent: "space-around", padding: "8px 0 max(8px, env(safe-area-inset-bottom))" }}>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = tab === item.id;
-          return (
-            <button key={item.id} onClick={() => setTab(item.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", color: active ? "#4FD1C5" : "#5A6772", padding: "4px 8px" }}>
-              <Icon size={19} />
-              <span style={{ fontSize: "10px", fontWeight: active ? 600 : 400 }}>{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-const addButtonStyle = { background: "transparent", border: "1px dashed #2A3540", borderRadius: "12px", padding: "12px", color: "#8B98A5", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "4px" };
-const inputStyle = { background: "#0F1419", border: "1px solid #2A3540", borderRadius: "8px", padding: "10px 12px", color: "#E6EDF3", fontSize: "14px", outline: "none", fontFamily: "inherit" };
-const saveButtonStyle = { flex: 1, background: "#4FD1C5", border: "none", borderRadius: "8px", padding: "10px", color: "#0F1419", fontWeight: 600, fontSize: "14px" };
-const cancelButtonStyle = { flex: 1, background: "transparent", border: "1px solid #2A3540", borderRadius: "8px", padding: "10px", color: "#8B98A5", fontSize: "14px" };
+                  Hey Sarthak. Base is online — kuch bhi p
