@@ -3,7 +3,7 @@ import { CheckSquare, FileText, MessageSquare, Bell, Plus, Send, Circle, CheckCi
 
 // IMPORTANT: change this to your deployed backend URL once Render is live.
 // For local testing on Replit, this points to the same Repl's backend port.
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = "https://base-dashboard-dc4m.onrender.com/api";
 
 export default function Dashboard() {
   const [tab, setTab] = useState("home");
