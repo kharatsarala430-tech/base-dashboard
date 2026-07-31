@@ -29,23 +29,25 @@ export default function Dashboard() {
   const [newReminderTime, setNewReminderTime] = useState("");
 
   const [chatInput, setChatInput] = useState("");
-  const [messages, setMessages] = useState([
-    { from: "ai", text: "Hey Sarthak. Base is online. Real AI chat comes in Phase 3." }
-  ]);
+  const [messages, setMessages] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
 
   // ---------- Load everything from backend on first render ----------
   const fetchAll = async () => {
     try {
-      const [tRes, nRes, rRes, oRes] = await Promise.all([
+      const [tRes, nRes, rRes, oRes, cRes] = await Promise.all([
         fetch(`${API_BASE}/tasks`),
         fetch(`${API_BASE}/notes`),
         fetch(`${API_BASE}/reminders`),
         fetch(`${API_BASE}/overview`),
+        fetch(`${API_BASE}/chat`),
       ]);
       setTasks(await tRes.json());
       setNotes(await nRes.json());
       setReminders(await rRes.json());
       setOverview(await oRes.json());
+      const chatHistory = await cRes.json();
+      setMessages(chatHistory.map(m => ({ from: m.role, text: m.content })));
     } catch (err) {
       console.error("Failed to load data — is the backend running?", err);
     } finally {
@@ -131,10 +133,25 @@ export default function Dashboard() {
     setReminders(reminders.filter((r) => r.id !== id));
   };
 
-  const sendMessage = () => {
-    if (!chatInput.trim()) return;
-    setMessages([...messages, { from: "user", text: chatInput }, { from: "ai", text: "AI response coming soon — wired up in Phase 3." }]);
+  const sendMessage = async () => {
+    if (!chatInput.trim() || chatLoading) return;
+    const userText = chatInput;
+    setMessages([...messages, { from: "user", text: userText }]);
     setChatInput("");
+    setChatLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: userText }),
+      });
+      const data = await res.json();
+      setMessages((prev) => [...prev, { from: "ai", text: data.content }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { from: "ai", text: "Connection error — backend se baat nahi ho payi." }]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   const navItems = [
@@ -328,15 +345,25 @@ export default function Dashboard() {
         {!loading && tab === "chat" && (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px", marginBottom: "12px" }}>
+              {messages.length === 0 && (
+                <div style={{ alignSelf: "flex-start", background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "10px 14px", maxWidth: "80%", fontSize: "14px" }}>
+                  Hey Sarthak. Base is online — kuch bhi pooch sakta hai.
+                </div>
+              )}
               {messages.map((m, i) => (
                 <div key={i} style={{
                   alignSelf: m.from === "user" ? "flex-end" : "flex-start",
                   background: m.from === "user" ? "#4FD1C5" : "#151C24",
                   color: m.from === "user" ? "#0F1419" : "#E6EDF3",
                   border: m.from === "ai" ? "1px solid #1C2530" : "none",
-                  borderRadius: "14px", padding: "10px 14px", maxWidth: "80%", fontSize: "14px"
+                  borderRadius: "14px", padding: "10px 14px", maxWidth: "80%", fontSize: "14px", whiteSpace: "pre-wrap"
                 }}>{m.text}</div>
               ))}
+              {chatLoading && (
+                <div style={{ alignSelf: "flex-start", background: "#151C24", border: "1px solid #1C2530", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#5A6772" }}>
+                  Typing...
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -344,20 +371,4 @@ export default function Dashboard() {
         {!loading && tab === "reminders" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {reminders.length === 0 && <div style={{ color: "#5A6772", textAlign: "center", padding: "20px 0" }}>No reminders yet.</div>}
-            {reminders.map((r) => (
-              <div key={r.id} style={{ background: "#151C24", border: "1px solid #1C2530", borderRadius: "12px", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: "15px" }}>{r.title}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ fontSize: "12px", color: "#F5A623", fontFamily: "monospace", fontWeight: 600 }}>{r.remind_time}</span>
-                  <button onClick={() => deleteReminder(r.id)} style={{ background: "none", border: "none", padding: 2 }}>
-                    <Trash2 size={14} color="#5A6772" />
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {!showReminderForm && <button onClick={() => setShowReminderForm(true)} style={addButtonStyle}><Plus size={18} /> Add Reminder</button>}
-            {showReminderForm && (
-              <div style={{ background: "#151C24", border: "1px solid #2A3540", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                <input value={newReminderTitle} onChange={(e) => setNewReminderTitle(e.target.value)} placeholder="Reminder title" style={inputStyle} autoFocus />
-        
+            {reminders.map((r) => 
