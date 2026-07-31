@@ -50,10 +50,18 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 due_date TEXT,
+                category TEXT NOT NULL DEFAULT 'Other',
                 done INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                completed_at TEXT
             )
         """)
+        # Migration: add columns if upgrading from an older version of the table
+        existing_cols = [row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+        if "category" not in existing_cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN category TEXT NOT NULL DEFAULT 'Other'")
+        if "completed_at" not in existing_cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN completed_at TEXT")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,11 +88,13 @@ init_db()
 class TaskCreate(BaseModel):
     title: str
     due_date: Optional[str] = None
+    category: Optional[str] = "Other"  # Sakha, SAI, DSA, Other
 
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     due_date: Optional[str] = None
+    category: Optional[str] = None
     done: Optional[bool] = None
 
 
@@ -116,8 +126,8 @@ def list_tasks():
 def create_task(task: TaskCreate):
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO tasks (title, due_date, done, created_at) VALUES (?, ?, 0, ?)",
-            (task.title, task.due_date, datetime.utcnow().isoformat())
+            "INSERT INTO tasks (title, due_date, category, done, created_at) VALUES (?, ?, ?, 0, ?)",
+            (task.title, task.due_date, task.category or "Other", datetime.utcnow().isoformat())
         )
         return {"id": cur.lastrowid, **task.dict(), "done": False}
 
@@ -131,6 +141,8 @@ def update_task(task_id: int, task: TaskUpdate):
         updates = task.dict(exclude_unset=True)
         if "done" in updates:
             updates["done"] = 1 if updates["done"] else 0
+            # Track when it was completed (for streaks and daily graphs). Clear it if un-done.
+            updates["completed_at"] = datetime.utcnow().isoformat() if updates["done"] else None
         if updates:
             set_clause = ", ".join(f"{k} = ?" for k in updates)
             conn.execute(f"UPDATE tasks SET {set_clause} WHERE id = ?", (*updates.values(), task_id))
@@ -213,18 +225,74 @@ def delete_reminder(reminder_id: int):
 
 @app.get("/api/overview")
 def get_overview():
-    """Real stats to replace the dummy data on the Overview/Home screen."""
+    """Real stats to power the Overview/Home screen: totals, 7-day trend, streak, category split."""
+    from datetime import timedelta
+
     with get_db() as conn:
         total_tasks = conn.execute("SELECT COUNT(*) as c FROM tasks").fetchone()["c"]
         done_tasks = conn.execute("SELECT COUNT(*) as c FROM tasks WHERE done = 1").fetchone()["c"]
         completion_pct = round((done_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+
+        # ---- Last 7 days: how many tasks completed each day ----
+        today = datetime.utcnow().date()
+        daily_counts = []
+        day_labels = []
+        for i in range(6, -1, -1):  # 6 days ago ... today
+            day = today - timedelta(days=i)
+            day_str = day.isoformat()
+            count = conn.execute(
+                "SELECT COUNT(*) as c FROM tasks WHERE completed_at IS NOT NULL AND date(completed_at) = ?",
+                (day_str,)
+            ).fetchone()["c"]
+            daily_counts.append(count)
+            day_labels.append(day.strftime("%a")[0])  # first letter: M, T, W...
+
+        # ---- Streak: consecutive days (ending today or yesterday) with at least 1 completed task ----
+        streak = 0
+        check_day = today
+        while True:
+            count = conn.execute(
+                "SELECT COUNT(*) as c FROM tasks WHERE completed_at IS NOT NULL AND date(completed_at) = ?",
+                (check_day.isoformat(),)
+            ).fetchone()["c"]
+            if count > 0:
+                streak += 1
+                check_day = check_day - timedelta(days=1)
+            else:
+                # Allow today to be "in progress" without breaking the streak
+                if check_day == today:
+                    check_day = check_day - timedelta(days=1)
+                    continue
+                break
+
+        # ---- Category split: % of tasks per category ----
+        category_rows = conn.execute(
+            "SELECT category, COUNT(*) as c FROM tasks GROUP BY category"
+        ).fetchall()
+        category_split = []
+        if total_tasks > 0:
+            for row in category_rows:
+                pct = round((row["c"] / total_tasks) * 100)
+                category_split.append({"label": row["category"], "count": row["c"], "pct": pct})
+
+        # ---- Upcoming: tasks with a due_date that aren't done yet ----
+        upcoming = conn.execute(
+            "SELECT title, due_date FROM tasks WHERE done = 0 AND due_date IS NOT NULL AND due_date != '' ORDER BY id DESC LIMIT 5"
+        ).fetchall()
+
         return {
             "total_tasks": total_tasks,
             "done_tasks": done_tasks,
             "completion_pct": completion_pct,
+            "streak": streak,
+            "daily_counts": daily_counts,
+            "day_labels": day_labels,
+            "category_split": category_split,
+            "upcoming": [dict(u) for u in upcoming],
         }
 
 
 @app.get("/")
 def health_check():
     return {"status": "Base backend is running"}
+        
